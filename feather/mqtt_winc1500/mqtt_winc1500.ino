@@ -14,9 +14,8 @@
 #include "Adafruit_MQTT_Client.h"
 #include <WiFi101.h>
 #include <ArduinoJson.h>
-#include "Device.h"
 #include "config.h"
-#include <string>
+#include <list>
 using namespace std;
 
 
@@ -32,6 +31,20 @@ int keyIndex = 0;                // your network key Index number (needed only f
 
 int status = WL_IDLE_STATUS;
 
+struct Measurement {
+  char* measurementName;
+  char* deviceClass;
+  char* stateTopic;
+  char* UoM;
+};
+
+struct Device {
+  char* deviceName;
+  char* platform;
+  list<Measurement> measurements;
+};
+
+
 /************ Global State (you don't need to change this!) ******************/
 
 //Set up the wifi client
@@ -44,13 +57,7 @@ Adafruit_MQTT_Client mqtt(&client, MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASSWOR
 
 /****************************** Feeds ***************************************/
 
-// originally: f"homeassistant/{device['platform']}/{config['node_id']}/{device['name']}"
-// TODO create a device class
-string HATopic(HA_TOPIC);
-string rootTopic = HATopic + "sensor/" + NODE_ID + "/" + DEVICE_NAME;
-string stateTopic = rootTopic + "/state";
-Adafruit_MQTT_Publish testAtmosphericsStateUpdate = Adafruit_MQTT_Publish(&mqtt, stateTopic.c_str());
-Device myDevice(DEVICE_NAME, DEVICE_PLATFORM);
+char rootTopic[1024], stateTopic[1024];
 
 /*************************** Sketch Code ************************************/
 
@@ -63,8 +70,6 @@ void setup() {
   while (!Serial);
   Serial.begin(115200);
 
-  Serial.println(F("Adafruit MQTT demo for WINC1500"));
-
   // Initialise the Client
   Serial.print(F("\nInit the WiFi module..."));
   // check for the presence of the breakout
@@ -75,47 +80,70 @@ void setup() {
   }
   Serial.println("ATWINC OK!");
 
-  string measurementName = "Test Temperature 2";
-  string deviceClass = "temperature";
-  string UoM = "UoM";
-  
-  Measurement m1(measurementName, deviceClass, stateTopic.c_str(), UoM);
-  myDevice.addMeasurement(m1);
+  // build root and state topic paths
+  strcpy(rootTopic, HA_TOPIC);
+  strcat(rootTopic, "sensor/");
+  strcat(rootTopic, NODE_ID);
+  strcat(rootTopic, "/");
+  strcat(rootTopic, DEVICE_NAME);
+
+  Serial.print("Root topic: ");
+  Serial.println(rootTopic);
+
+  strcpy(stateTopic, rootTopic);
+  strcat(stateTopic, "/state");
+
+  Serial.print("State topic: ");
+  Serial.println(stateTopic);
+
+  // add measurements to the list
+  list<Measurement> measurements;
+  measurements.push_back(Measurement {"Test Temperature 2", "temperature", stateTopic, "degC"});
+  measurements.push_back(Measurement {"Test Temperature 2", "humidity", stateTopic, "%"});
+  measurements.push_back(Measurement {"Test Temperature 2", "pressure", stateTopic, "hPa"});
+
+  Device myDevice = {"test_atmospherics_2", "sensor", measurements};
 
   for ( Measurement& measurement : myDevice.measurements )
-    {
-      string configTopic = rootTopic + "_" + measurement.deviceClass + "/config";
-      Serial.println("Config topic: ");
-      Serial.print(configTopic.c_str());
-      Adafruit_MQTT_Publish testAtmosphericsConfigUpdate = Adafruit_MQTT_Publish(&mqtt, configTopic.c_str());
-      
-      DynamicJsonDocument configPayload(1024);
-      configPayload["name"] = measurement.measurementName;
-      configPayload["device_class"] = measurement.deviceClass;
-      configPayload["state_topic"] = stateTopic.c_str();
-      configPayload["unit_of_measurement"] = measurement.UoM;
-      configPayload["value_template"] = "{{ value_json." + measurement.deviceClass + "}}";
-      char configPayloadChar[1024];
-      serializeJson(configPayload, configPayloadChar);
-      Serial.print(F("\nSending config "));
-      Serial.print(configPayloadChar);
-      Serial.print("...");
-      if (! testAtmosphericsConfigUpdate.publish(configPayloadChar)) {
-        Serial.println(F("Failed"));
-      } else {
-        Serial.println(F("OK!"));
-      }
-    }
+  {
+    char configTopic[1024];
+    strcpy(configTopic, rootTopic);
+    strcat(configTopic, "_");
+    strcat(configTopic, measurement.deviceClass);
+    strcat(configTopic, "/config");
+    Serial.print("Config topic: ");
+    Serial.println(configTopic);
+    
+    MQTT_connect();
 
+    DynamicJsonDocument configPayload(1024);
+    configPayload["name"] = measurement.measurementName;
+    configPayload["device_class"] = measurement.deviceClass;
+    configPayload["state_topic"] = stateTopic;
+    configPayload["unit_of_measurement"] = measurement.UoM;
+    char valueTemplate[128];
+    strcpy(valueTemplate, "{{ value_json.");
+    strcat(valueTemplate, measurement.deviceClass);
+    strcat(valueTemplate, " }}");
+    configPayload["value_template"] = valueTemplate;
 
-  Serial.println("Setting stateTopic to :");
-  Serial.print(stateTopic.c_str());
-  
-  pinMode(LEDPIN, OUTPUT);
-//  mqtt.subscribe(&onoffbutton);
+    char configPayloadChar[1024];
+    serializeJson(configPayload, configPayloadChar);
+    
+    delay(5000);
+
+    Serial.println(F("\nSending config "));
+    Serial.println(configPayloadChar);
+    Serial.print("...");
+//  if (! Adafruit_MQTT_Publish(&mqtt, stateTopic).publish(configPayloadChar)) {
+//    Serial.println(F("Failed"));
+//  } else {
+//    Serial.println(F("OK!"));
+//  }
+  }
 }
 
-uint32_t x=0;
+uint32_t x = 0;
 
 void loop() {
   // Ensure the connection to the MQTT server is alive (this will make the first
@@ -130,10 +158,11 @@ void loop() {
   statePayload["pressure"] = 999.0;
   char statePayloadChar[1024];
   serializeJson(statePayload, statePayloadChar);
+
   Serial.print(F("\nSending state "));
   Serial.print(statePayloadChar);
   Serial.print("...");
-  if (! testAtmosphericsStateUpdate.publish(statePayloadChar)) {
+  if (! Adafruit_MQTT_Publish(&mqtt, stateTopic).publish(statePayloadChar)) {
     Serial.println(F("Failed"));
   } else {
     Serial.println(F("OK!"));
@@ -160,7 +189,7 @@ void MQTT_connect() {
       delay(1000);
     }
   }
-  
+
   // Stop if already connected.
   if (mqtt.connected()) {
     return;
@@ -169,10 +198,10 @@ void MQTT_connect() {
   Serial.print("Connecting to MQTT... ");
 
   while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
-       Serial.println(mqtt.connectErrorString(ret));
-       Serial.println("Retrying MQTT connection in 5 seconds...");
-       mqtt.disconnect();
-       delay(5000);  // wait 5 seconds
+    Serial.println(mqtt.connectErrorString(ret));
+    Serial.println("Retrying MQTT connection in 5 seconds...");
+    mqtt.disconnect();
+    delay(5000);  // wait 5 seconds
   }
   Serial.println("MQTT Connected!");
 }
