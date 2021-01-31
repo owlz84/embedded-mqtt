@@ -1,0 +1,25 @@
+broker:
+  host: homeassistant.twokendall.ave
+  port: 1883
+  username: lorabridgeuser
+  password: lorabridgepasswd
+topics:
+  - "homeassistant/#"
+node_id: 343bdc6d-f280-4194-9803-5ab2c6cd7b65
+devices:
+  - device:
+    name: test_atmospherics
+    platform: sensor
+    measurements:
+      - measurement:
+        name: Test Temperature
+        device_class: temperature
+        unit_of_measurement: C
+      - measurement:
+        name: Test Humidity
+        device_class: humidity
+        unit_of_measurement: "%"
+      - measurement:
+        name: Test Pressure
+        device_class: pressure
+        unit_of_measurement: "hPa"
