@@ -96,11 +96,24 @@ void setup() {
   Serial.print("State topic: ");
   Serial.println(stateTopic);
 
+}
+
+uint32_t x = 0;
+
+void loop() {
+  // Ensure the connection to the MQTT server is alive (this will make the first
+  // connection and automatically reconnect when disconnected).  See the MQTT_connect
+  // function definition further below.
+  MQTT_connect();
+
+  Serial.print("MAXBUFFERSIZE: ");
+  Serial.println(MAXBUFFERSIZE);
+
   // add measurements to the list
   list<Measurement> measurements;
   measurements.push_back(Measurement {"Test Temperature 2", "temperature", stateTopic, "degC"});
-  measurements.push_back(Measurement {"Test Temperature 2", "humidity", stateTopic, "%"});
-  measurements.push_back(Measurement {"Test Temperature 2", "pressure", stateTopic, "hPa"});
+  measurements.push_back(Measurement {"Test Humidity 2", "humidity", stateTopic, "%"});
+  measurements.push_back(Measurement {"Test Pressure 2", "pressure", stateTopic, "hPa"});
 
   Device myDevice = {"test_atmospherics_2", "sensor", measurements};
 
@@ -113,15 +126,13 @@ void setup() {
     strcat(configTopic, "/config");
     Serial.print("Config topic: ");
     Serial.println(configTopic);
-    
-    MQTT_connect();
 
     DynamicJsonDocument configPayload(1024);
     configPayload["name"] = measurement.measurementName;
     configPayload["device_class"] = measurement.deviceClass;
     configPayload["state_topic"] = stateTopic;
     configPayload["unit_of_measurement"] = measurement.UoM;
-    char valueTemplate[128];
+    char valueTemplate[256];
     strcpy(valueTemplate, "{{ value_json.");
     strcat(valueTemplate, measurement.deviceClass);
     strcat(valueTemplate, " }}");
@@ -129,34 +140,23 @@ void setup() {
 
     char configPayloadChar[1024];
     serializeJson(configPayload, configPayloadChar);
-    
-    delay(5000);
 
     Serial.println(F("\nSending config "));
     Serial.println(configPayloadChar);
     Serial.print("...");
-//  if (! Adafruit_MQTT_Publish(&mqtt, stateTopic).publish(configPayloadChar)) {
-//    Serial.println(F("Failed"));
-//  } else {
-//    Serial.println(F("OK!"));
-//  }
+    if (! Adafruit_MQTT_Publish(&mqtt, configTopic).publish(int32_t {0})) {
+      Serial.println(F("Failed"));
+    } else {
+      Serial.println(F("OK!"));
+    }
   }
-}
-
-uint32_t x = 0;
-
-void loop() {
-  // Ensure the connection to the MQTT server is alive (this will make the first
-  // connection and automatically reconnect when disconnected).  See the MQTT_connect
-  // function definition further below.
-  MQTT_connect();
 
   // Now we can publish stuff!
-  DynamicJsonDocument statePayload(1024);
+  DynamicJsonDocument statePayload(256);
   statePayload["temperature"] = 18.3;
   statePayload["humidity"] = 42.0;
   statePayload["pressure"] = 999.0;
-  char statePayloadChar[1024];
+  char statePayloadChar[256];
   serializeJson(statePayload, statePayloadChar);
 
   Serial.print(F("\nSending state "));
