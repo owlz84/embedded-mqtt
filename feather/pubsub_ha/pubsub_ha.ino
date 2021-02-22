@@ -58,10 +58,11 @@ PubSubClient client(MQTT_HOST, MQTT_PORT, wificlient);
 
 void setup() {  
   WiFi.setPins(8,7,4,2);
-  WiFi.lowPowerMode();
+  WiFi.maxLowPowerMode();
+  Wifi.hostname(F("pubsubtest01"));
 
-  while (!Serial);
-  Serial.begin(115200);
+//  while (!Serial);
+//  Serial.begin(115200);
 
   randomSeed(analogRead(0));
 
@@ -139,6 +140,7 @@ void chkBattery(float &measuredvbat){
   measuredvbat *= 2;    // we divided by 2, so multiply back
   measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
   measuredvbat /= 1024; // convert to voltage
+  measuredvbat = round2(measuredvbat);
 }
 
 void discovery() {
@@ -163,14 +165,14 @@ void discovery() {
   for ( Measurement& measurement : myDevice.measurements )
   {
     configTopicBuilder(configTopic, rootTopic, DeviceClassName[measurement.deviceClass]);
-    Serial.print("Config topic: ");
-    Serial.println(configTopic);
+//    Serial.print("Config topic: ");
+//    Serial.println(configTopic);
 
     success = client.publish(configTopic, "", false);
     client.loop();
     delay(2000);
     configPayload(payload, measurement, myDevice);
-    Serial.println(payload);
+//    Serial.println(payload);
     
     client.publish(configTopic, payload, false);
     
@@ -209,22 +211,20 @@ void state(){
   // set stateTopic
   strncpy(stateTopic, rootTopic, maxPathLength);
   strcat(stateTopic, "/state");
-  Serial.print("State topic: ");
-  Serial.println(stateTopic);
 
-  Serial.print("State: ");
+//  Serial.print("State: ");
   statePayload(payload);
-  Serial.println(payload);
+//  Serial.println(payload);
   
   success = client.publish(stateTopic, payload, false);
   
-  tasks.after(5000, state);
+  tasks.after(120000, state);
   
 }
 
 void beginWiFiIfNeeded() {
   
-  Serial.println("Checking WiFi state...");
+//  Serial.println("Checking WiFi state...");
   switch (WiFi.status()) {
 //    case WL_IDLE_STATUS:
     case WL_CONNECTED: tasks.after(30000, beginWiFiIfNeeded); return; // after 30 seconds call beginWiFiIfNeeded() again
@@ -233,10 +233,10 @@ void beginWiFiIfNeeded() {
     case WL_CONNECTION_LOST: Serial.println("wifi connection lost"); break;
     case WL_DISCONNECTED: Serial.println("wifi disconnected"); break;
   }
-  Serial.print("Attempting to connect to SSID: ");
-  Serial.print(WIFI_SSID);
+//  Serial.print("Attempting to connect to SSID: ");
+//  Serial.print(WIFI_SSID);
   while (WiFi.status() != WL_CONNECTED) {
-    Serial.print("...");
+//    Serial.print("...");
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     // wait 10 seconds for connection:
     uint8_t timeout = 10;
@@ -246,27 +246,27 @@ void beginWiFiIfNeeded() {
     }
   }
   
-  Serial.println("OK!");
+//  Serial.println("OK!");
   tasks.after(30000, beginWiFiIfNeeded); // after 30 seconds call beginWiFiIfNeeded() again
 }
 
 void connectMQTTClientIfNeeded() {
-  Serial.println("Checking MQTT state...");
+//  Serial.println("Checking MQTT state...");
   switch(client.state()) {
-    case MQTT_CONNECTED: client.loop(); tasks.after(10000, connectMQTTClientIfNeeded); return; // after 30 seconds call connectMQTTClientIfNeeded() again
+    case MQTT_CONNECTED: tasks.after(30000, connectMQTTClientIfNeeded); return; // after 30 seconds call connectMQTTClientIfNeeded() again
     case MQTT_DISCONNECTED: Serial.println("MQTT client disconnected cleanly"); break;
     case MQTT_CONNECT_FAILED: Serial.println("MQTT network connection failed"); break;
     case MQTT_CONNECTION_LOST: Serial.println("MQTT network connection was broken"); break;
     case MQTT_CONNECTION_TIMEOUT: Serial.println("MQTT server didn't respond within the keepalive time"); break;
   }
-  Serial.print("Connecting to MQTT client: ");
-  Serial.print(MQTT_HOST);
-  Serial.print("...");
+//  Serial.print("Connecting to MQTT client: ");
+//  Serial.print(MQTT_HOST);
+//  Serial.print("...");
   client.setBufferSize(maxPayloadLength);
   client.connect(DEVICE_ID, MQTT_USER, MQTT_PASSWORD);
-  Serial.println("OK!");
+//  Serial.println("OK!");
 
-  tasks.after(10000, connectMQTTClientIfNeeded);
+  tasks.after(30000, connectMQTTClientIfNeeded);
 }
 
 bool mqttConnected(){
